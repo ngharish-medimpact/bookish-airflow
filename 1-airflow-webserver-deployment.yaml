@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: pdp-dev
+  labels:
+    tier: airflow
+    component: webserver
+spec:
+  replicas: 1 # Adjust as needed
+  selector:
+    matchLabels:
+      tier: airflow
+      component: webserver
+  template:
+    metadata:
+      labels:
+        tier: airflow
+        component: webserver
+    spec:
+      serviceAccountName: "pdp-default"
+      restartPolicy: Always
+      securityContext:
+        runAsUser: 71357
+        fsGroup: 71357
+      initContainers:
+        - name: dag-fetcher
+          image: docker-local.artifactory.medimpact.com/com/medimpact/pdp/medgen-dags-python:0.0.6
+          imagePullPolicy: Always
+          command:
+            - "rsync"
+            - "-av"
+            - "--no-times"
+            - "--no-perms"
+            - "/source_files/dags/"
+            - "/dags/"
+          volumeMounts:
+            - name: dags-volume
+              mountPath: "/dags"
+        - name: wait-for-airflow-migrations
+          image: docker-local.artifactory.medimpact.com/com/medimpact/pdp/medgen-airflow-python:0.0.2-build99
+          imagePullPolicy: Always
+          args:
+            - "bash"
+            - "-c"
+            - "exec airflow db check-migrations --migration-wait-timeout=60"
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-postgres-creds
+                  key: postgres_password
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow_user:$(POSTGRES_PASSWORD)@devedb0-vip.medimpact.com:5432/pdp_airflow_db
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      containers:
+        - name: webserver
+          image: docker-local.artifactory.medimpact.com/com/medimpact/pdp/medgen-airflow-python:0.0.2-build99
+          imagePullPolicy: Always
+          args:
+            - "bash"
+            - "-c"
+            - "exec airflow webserver"
+          ports:
+            - name: webserver-ui
+              containerPort: 8080
+          env:
+            - name: AIRFLOW_HOME
+              value: /opt/airflow
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: CeleryExecutor
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-postgres-creds
+                  key: postgres_password
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow_user:$(POSTGRES_PASSWORD)@devedb0-vip.medimpact.com:5432/pdp_airflow_db
+            - name: REDIS_PASSWORD # Add REDIS_PASSWORD env var
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-redis-password
+                  key: password
+            - name: AIRFLOW__CELERY__BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-broker-url
+                  key: connection
+            - name: AIRFLOW__CELERY__RESULT_BACKEND # Update result backend to use Redis
+              value: "redis://:$(REDIS_PASSWORD)@airflow-redis:6379/1"
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-fernet-key
+                  key: fernet-key
+            - name: AIRFLOW__WEBSERVER__SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-webserver-secret-key
+                  key: webserver-secret-key
+            # If using RBAC (default in modern Airflow)
+            - name: AIRFLOW__WEBSERVER__RBAC
+              value: "True"
+            # For webserver to pick up DAGs
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/airflow/dags
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health # Airflow health check endpoint
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: dags-volume
+              mountPath: /opt/airflow/dags
+            - name: config
+              mountPath: /opt/airflow/airflow.cfg
+              subPath: airflow.cfg
+              readOnly: true
+            - name: config # For airflow_local_settings.py if used
+              mountPath: /opt/airflow/config/airflow_local_settings.py
+              subPath: airflow_local_settings.py
+              readOnly: true
+            - name: logs # Webserver also generates logs
+              mountPath: /opt/airflow/logs
+      volumes:
+        - name: dags-volume
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: airflow-config
+        - name: logs # Using an emptyDir for webserver logs, consider remote logging for prod
+          emptyDir: {}

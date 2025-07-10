@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-webserver
+  namespace: pdp-dev
+  labels:
+    tier: airflow
+    component: webserver
+spec:
+  type: ClusterIP
+  selector:
+    tier: airflow
+    component: webserver
+  ports:
+    - name: http-webserver
+      protocol: TCP
+      port: 8080 # Port the service will listen on
+      targetPort: webserver-ui # Port on the pod (referencing the containerPort name from deployment)

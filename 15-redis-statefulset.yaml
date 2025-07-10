@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: airflow-redis
+  namespace: pdp-dev
+  labels:
+    tier: airflow
+    component: redis
+spec:
+  serviceName: airflow-redis
+  selector:
+    matchLabels:
+      tier: airflow
+      component: redis
+  template:
+    metadata:
+      labels:
+        tier: airflow
+        component: redis
+    spec:
+      terminationGracePeriodSeconds: 600
+      serviceAccountName: "pdp-default"
+      securityContext: 
+        runAsUser: 71357
+      containers:
+        - name: redis
+          image: docker-local.artifactory.medimpact.com/dockerhub/redis:7.2-bookworm
+          imagePullPolicy: IfNotPresent
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command: ["/bin/sh"]
+          resources:
+            {}
+          args: ["-c", "redis-server --requirepass ${REDIS_PASSWORD}"]
+          ports:
+            - name: redis-db
+              containerPort: 6379
+          volumeMounts:
+            - name: redis-db
+              mountPath: /data
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-redis-password
+                  key: password
+      volumes:
+        - name: redis-db
+          emptyDir: {}

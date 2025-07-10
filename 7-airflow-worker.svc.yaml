@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-worker
+  namespace: pdp-dev
+  labels:
+    tier: airflow
+    component: worker
+spec:
+  clusterIP: None
+  selector:
+    tier: airflow
+    component: worker
+  ports:
+    - name: worker-logs
+      protocol: TCP
+      port: 8793
+      targetPort: 8793

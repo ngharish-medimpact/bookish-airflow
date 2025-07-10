@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: airflow-webserver-ingress
+  namespace: pdp-dev
+  annotations:
+    kubernetes.io/ingress.class: "nginx" # Generic annotation for Nginx, adjust if using a different controller
+    # If your Nginx ingress controller version is <0.22.0, you might need:
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+    # For newer versions, rewrite-target is often not needed for root paths
+    # or can be handled differently if issues arise.
+spec:
+  rules:
+  - host: pdpwf-dev.medimpact.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: airflow-webserver # Name of the webserver service
+            port:
+              number: 8080 # Port exposed by the webserver service
