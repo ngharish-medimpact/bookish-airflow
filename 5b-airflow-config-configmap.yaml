@@ -19,7 +19,7 @@ data:
     kubernetes_queue = kubernetes
 
     [database] # Changed from [core] for sql_alchemy_conn as per modern practice
-    sql_alchemy_conn = postgresql+psycopg2://airflow:airflow@postgres-service/airflow
+    # sql_alchemy_conn = postgresql+psycopg2://airflow:airflow@postgres-service/airflow # Overridden by env var AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
 
     [core]
     # auth_manager = airflow.auth.managers.simple_auth_manager.SimpleAuthManager
@@ -88,3 +88,23 @@ data:
 
   airflow_local_settings.py: |-
 ---
+
+  pod_template_file.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: dummy-pod-template # Name can be anything here, it's a template
+    spec:
+      # restartPolicy: Never # Common for task pods
+      containers:
+      - name: base
+        image: "" # This will be overridden by Airflow or specific task definitions
+        imagePullPolicy: IfNotPresent
+        # args: ["echo", "This is a dummy pod template for Airflow."]
+        # resources:
+        #   limits:
+        #     memory: "1Gi"
+        #     cpu: "1"
+        #   requests:
+        #     memory: "512Mi"
+        #     cpu: "0.5"
