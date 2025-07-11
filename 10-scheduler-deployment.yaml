@@ -86,6 +86,16 @@ spec:
               value: CeleryExecutor
             - name: AIRFLOW__CORE__LOAD_EXAMPLES
               value: "False"
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-fernet-key
+                  key: fernet-key
+            - name: AIRFLOW__WEBSERVER__SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-webserver-secret-key
+                  key: webserver-secret-key
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -99,7 +109,7 @@ spec:
                   name: airflow-redis-password
                   key: password
             - name: AIRFLOW__CELERY__RESULT_BACKEND
-              value: "db+redis://:$(REDIS_PASSWORD)@airflow-redis:6379/1"
+              value: "redis://:$(REDIS_PASSWORD)@airflow-redis:6379/1"
             - name: AIRFLOW__CELERY__BROKER_URL
               valueFrom:
                 secretKeyRef:
